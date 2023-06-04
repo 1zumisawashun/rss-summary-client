@@ -1,4 +1,20 @@
-const greeting = () => {
+export const sendToSlack = (params: any, message: string) => {
+  const url = process.env.SLACK_INCOMING_WEBHOOK;
+  const user = params.event.user;
+
+  if (!url) return;
+
+  const jsonData = { text: `<@${user}> ${message}` };
+  const payload = JSON.stringify(jsonData);
+
+  UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: payload,
+  });
+};
+
+const greeting = (params: any) => {
   //スクリプトプロパティに設定したOpenAIのAPIキーを取得
   const apiKey = process.env.CHAT_GPT_API_KEY;
   //ChatGPTのAPIのエンドポイントを設定
@@ -30,7 +46,9 @@ const greeting = () => {
     UrlFetchApp.fetch(apiUrl, options).getContentText()
   );
   //ChatGPTのAPIレスポンスをログ出力
-  console.log(response.choices[0].message.content);
+  const message = response.choices[0].message.content;
+
+  sendToSlack(params, message);
 };
 
 const main = (e: any) => {
@@ -52,7 +70,7 @@ const main = (e: any) => {
   cache.put(params.event.client_msg_id, "done", 600);
 
   // NOTE:以下からメインの処理
-  greeting();
+  greeting(params);
 
   return;
 };
