@@ -1,11 +1,22 @@
-export const sendToSlack = (params: any, message: string) => {
+export const sendToSlack = (
+  params: any,
+  channelId: string,
+  thread_ts: string
+) => {
   const url = process.env.SLACK_INCOMING_WEBHOOK;
-  const user = params.event.user;
+  const event = params.event;
+  const user = event.user;
 
   if (!url) return;
 
-  const jsonData = { text: `<@${user}> ${message}` };
-  const payload = JSON.stringify(jsonData);
+  const payload = JSON.stringify({
+    token: process.env.BOT_USER_OAUTH_TOKEN,
+    channel: channelId,
+    text: `<@${user}> メンションありがとうモス！\n要約するモス！\n\n${JSON.stringify(
+      params
+    )}`,
+    thread_ts: thread_ts,
+  });
 
   UrlFetchApp.fetch(url, {
     method: "post",
@@ -14,41 +25,39 @@ export const sendToSlack = (params: any, message: string) => {
   });
 };
 
-const greeting = (params: any) => {
-  //スクリプトプロパティに設定したOpenAIのAPIキーを取得
+const createSummary = (params: any) => {
   const apiKey = process.env.CHAT_GPT_API_KEY;
-  //ChatGPTのAPIのエンドポイントを設定
   const apiUrl = "https://api.openai.com/v1/chat/completions";
-  //ChatGPTに投げるメッセージを定義(ユーザーロールの投稿文のみ)
+  const text = params.event.text;
+
   const messages = [
-    { role: "user", content: "Google Apps Scriptの活用事例を教えてください" },
+    {
+      role: "user",
+      content: `${text}の中にあるリンク先の内容を要約してください。リンク先の内容が外国語の場合は日本語で要約してください。３行くらいでまとめてください。`,
+    },
   ];
-  //OpenAIのAPIリクエストに必要なヘッダー情報を設定
   const headers = {
     Authorization: "Bearer " + apiKey,
     "Content-type": "application/json",
-    "X-Slack-No-Retry": 1,
   };
-  //ChatGPTモデルやトークン上限、プロンプトをオプションに設定
-  const options = {
+
+  const payload = {
+    model: "gpt-3.5-turbo",
+    max_tokens: 1024,
+    temperature: 0.9,
+    messages: messages,
+  };
+
+  const response = UrlFetchApp.fetch(apiUrl, {
     muteHttpExceptions: true,
     headers: headers,
-    method: "POST",
-    payload: JSON.stringify({
-      model: "gpt-3.5-turbo",
-      max_tokens: 1024,
-      temperature: 0.9,
-      messages: messages,
-    }),
-  } as any;
-  //OpenAIのChatGPTにAPIリクエストを送り、結果を変数に格納
-  const response = JSON.parse(
-    UrlFetchApp.fetch(apiUrl, options).getContentText()
-  );
-  //ChatGPTのAPIレスポンスをログ出力
-  const message = response.choices[0].message.content;
+    method: "post",
+    payload: JSON.stringify(payload),
+  });
 
-  sendToSlack(params, message);
+  const parsedResponse = JSON.parse(response.getContentText());
+
+  return parsedResponse.choices[0].message.content;
 };
 
 const main = (e: any) => {
@@ -59,18 +68,32 @@ const main = (e: any) => {
     return ContentService.createTextOutput(params.challenge);
   }
 
+  const event = params.event;
+  const subtype = event.subtype;
+  const type = params.event.type;
+
   // NOTE:Slack Botによるメンションを無視する
-  if ("subtype" in params.event) return;
+  if (subtype) return;
 
   // NOTE:Slackの3秒ルールで発生するリトライをキャッシュする
   const cache = CacheService.getScriptCache();
+  if (cache.get(params.event_id) == "done") return;
+  cache.put(params.event_id, "done", 600);
 
-  if (cache.get(params.event.client_msg_id) == "done") return;
+  if (type === "reaction_added") {
+    const channelId = event.item.channel;
+    const thread_ts = event.item.ts;
+    // NOTE:「要約して」スタンプだけに反応させる
+    // NOTE:スタンプを押下したメッセージの内容を取得する
+    sendToSlack(params, channelId, thread_ts);
+  }
 
-  cache.put(params.event.client_msg_id, "done", 600);
-
-  // NOTE:以下からメインの処理
-  greeting(params);
+  if (type === "message") {
+    const channelId = event.channel;
+    const thread_ts = event.thread_ts || event.ts;
+    // NOTE:RSSの内容だけに反応させる
+    sendToSlack(params, channelId, thread_ts);
+  }
 
   return;
 };
