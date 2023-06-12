@@ -1,7 +1,8 @@
 export const sendToSlack = (
   params: any,
   channelId: string,
-  thread_ts: string
+  thread_ts: string,
+  message?: any
 ) => {
   const url = process.env.SLACK_INCOMING_WEBHOOK;
   const event = params.event;
@@ -9,12 +10,12 @@ export const sendToSlack = (
 
   if (!url) return;
 
+  const text = message ? JSON.stringify(message) : JSON.stringify(event);
+
   const payload = JSON.stringify({
     token: process.env.BOT_USER_OAUTH_TOKEN,
     channel: channelId,
-    text: `<@${user}> メンションありがとうモス！\n要約するモス！\n\n${JSON.stringify(
-      params
-    )}`,
+    text: `<@${user}> メンションありがとうモス！\n要約するモス！\n\n${text}`,
     thread_ts: thread_ts,
   });
 
@@ -60,6 +61,27 @@ const createSummary = (params: any) => {
   return parsedResponse.choices[0].message.content;
 };
 
+const getReactions = (params: any, channelId: string, thread_ts: string) => {
+  const messageOptions = {
+    method: "post",
+    contentType: "application/x-www-form-urlencoded",
+    payload: {
+      token: process.env.BOT_USER_OAUTH_TOKEN,
+      channel: channelId,
+      timestamp: thread_ts,
+    },
+  };
+
+  const response = UrlFetchApp.fetch(
+    "https://slack.com/api/reactions.get",
+    messageOptions as any
+  );
+
+  const json = JSON.parse(response as any);
+  const reactions = json.message.reactions;
+  return reactions;
+};
+
 const main = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
 
@@ -83,9 +105,11 @@ const main = (e: any) => {
   if (type === "reaction_added") {
     const channelId = event.item.channel;
     const thread_ts = event.item.ts;
+
+    const reactions = getReactions(params, channelId, thread_ts);
     // NOTE:「要約して」スタンプだけに反応させる
     // NOTE:スタンプを押下したメッセージの内容を取得する
-    sendToSlack(params, channelId, thread_ts);
+    sendToSlack(params, channelId, thread_ts, reactions);
   }
 
   if (type === "message") {
