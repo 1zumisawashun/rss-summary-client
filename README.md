@@ -1,41 +1,51 @@
-# Google App Script starter template
+# rss-summary-client
 
-Starter template for Google App Script development in local.
+rss-summary-client
 
-## 🎨 Features
+## Overview
 
-- Deploy local project with [clasp](https://github.com/google/clasp)
-- Use TypeScript
-- Bundle file with Webpack5 （You can use npm modules）
-- Lint code with [ESLint](https://github.com/eslint/eslint) 
-- Format code with [prettier](https://github.com/prettier/prettier)
-- Pre commit lint and format with [husky](https://github.com/typicode/husky) and [lint-stage](https://github.com/okonet/lint-staged)
+- Slack RSS Appの要約をスレッドに投稿します。
+- Slack RSS App以外に「要約して！」スタンプを押したメッセージの要約をスレッドに投稿することも可能です。
+- 要約するためにChatGPTを使用しています。
 
-## 🚀 Try it now!
-GitHub Template
-[Create a repo from this template on GitHub](https://github.com/kawamataryo/google-app-script-starter-template/generate)
+## Installation
 
-Fix the `project_id` in `.clasp.json` to your GAS project.
+- clone
 
-```.clasp.json
-{
-  "scriptId": "<YOUR_SCRIPT_ID>",
-  "rootDir": "./dist"
-}
+```bash
+$ git clone git@github.com:1zumisawashun/rss-summary-client.git
+$ cd rss-summary-client
 ```
 
-## ⚒ Usage
+- install
 
-### Build
-Build project with Webpack.
+```bash
+$ yarn install
+```
+- copy
 
-```
-npm run build
+```bash
+$ cp .env.example .env2
+$ cp .clasp.example.json .clasp.json
 ```
 
-### Deploy
-Deploy project with clasp.
+- 上記の手順で失敗する場合 [Troubleshoot](#Troubleshoot)を確認してください
 
+## How to
+
+- deployする
+
+```bash
+$ yarn deploy
 ```
-npm run deploy
+
+- linterを当てる
+
+```bash
+$ yarn lint:fix
 ```
+
+## Troubleshoot
+
+- なし
+
