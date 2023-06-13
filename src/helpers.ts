@@ -1,12 +1,12 @@
-export const createSummary = (params: any) => {
+//ex) `${params.event.text}の中にあるリンク先の内容を要約してください。リンク先の内容が外国語の場合は日本語で要約してください。３行くらいでまとめてください。`
+export const createSummary = (params: any, content: string) => {
   const apiKey = process.env.CHAT_GPT_API_KEY;
   const apiUrl = "https://api.openai.com/v1/chat/completions";
-  const text = params.event.text;
 
   const messages = [
     {
       role: "user",
-      content: `${text}の中にあるリンク先の内容を要約してください。リンク先の内容が外国語の場合は日本語で要約してください。３行くらいでまとめてください。`,
+      content: content,
     },
   ];
   const headers = {

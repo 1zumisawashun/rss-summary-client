@@ -1,4 +1,4 @@
-// import { createSummary } from "./helpers";
+import { createSummary } from "./helpers";
 
 export const sendToSlack = (
   params: any,
@@ -12,12 +12,20 @@ export const sendToSlack = (
 
   if (!url) return;
 
-  const text = message ? JSON.stringify(message) : JSON.stringify(event);
+  // const text = message ? JSON.stringify(message) : JSON.stringify(event);
+  const randomText = createSummary(
+    params,
+    "10文字くらいの適当な言葉を喋ってください。"
+  );
+
+  // <@${user}>
+
+  const text = JSON.stringify(message) || randomText;
 
   const payload = JSON.stringify({
     token: process.env.BOT_USER_OAUTH_TOKEN,
     channel: channelId,
-    text: `<@${user}> ${text}`,
+    text: text,
     thread_ts: thread_ts,
   });
 
@@ -90,8 +98,10 @@ const main = (e: any) => {
       thread_ts
     );
     // NOTE:「要約して」スタンプだけに反応させる
-    // NOTE:スタンプを押下したメッセージの内容を取得する
-    sendToSlack(params, channelId, thread_ts, conversationsHistory);
+
+    // NOTE:スタンプを押下したメッセージ（単体）の内容を取得する
+    const message = conversationsHistory.messages[0];
+    sendToSlack(params, channelId, thread_ts, message);
   }
 
   if (type === "message") {
@@ -99,6 +109,13 @@ const main = (e: any) => {
     const thread_ts = event.thread_ts || event.ts;
     // NOTE:RSSの内容だけに反応させる
     sendToSlack(params, channelId, thread_ts);
+  }
+
+  if (type === "bot_message") {
+    const channelId = event.channel;
+    const thread_ts = event.thread_ts || event.ts;
+    // NOTE:RSSの内容だけに反応させる
+    sendToSlack(params, channelId, thread_ts, "ボットメッセージです！");
   }
 
   return;
