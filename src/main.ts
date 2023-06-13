@@ -1,31 +1,18 @@
-import { createSummary } from "./helpers";
+// import { getChatGptMessage } from "./helpers";
 
 export const sendToSlack = (
-  params: any,
-  channelId: string,
-  thread_ts: string,
+  channelId?: string,
+  thread_ts?: string,
   message?: any
 ) => {
   const url = process.env.SLACK_INCOMING_WEBHOOK;
-  const event = params.event;
-  const user = event.user;
 
   if (!url) return;
-
-  // const text = message ? JSON.stringify(message) : JSON.stringify(event);
-  const randomText = createSummary(
-    params,
-    "10文字くらいの適当な言葉を喋ってください。"
-  );
-
-  // <@${user}>
-
-  const text = JSON.stringify(message) || randomText;
 
   const payload = JSON.stringify({
     token: process.env.BOT_USER_OAUTH_TOKEN,
     channel: channelId,
-    text: text,
+    text: JSON.stringify(message),
     thread_ts: thread_ts,
   });
 
@@ -36,36 +23,31 @@ export const sendToSlack = (
   });
 };
 
-const getConversationsHistory = (
-  params: any,
-  channelId: string,
-  ts: string
-) => {
-  const messageOptions = {
-    method: "post",
-    contentType: "application/x-www-form-urlencoded",
-    payload: {
-      token: process.env.BOT_USER_OAUTH_TOKEN,
-      channel: channelId,
-      ts: ts,
-      limit: 1,
-      inclusive: true,
-    },
+const getConversationsReplies = (channelId: string, ts: string) => {
+  /**
+   * 初めはreactions.getでリアクション（スタンプ）したメッセージを取得していたが
+   * まるっと情報を取得するならconversations.historyの方が期待値に近いので採用。
+   * しかしconversations.historyがアップデートに伴いconversations.repliesを使う必要があった。
+   */
+  const payload = {
+    token: process.env.BOT_USER_OAUTH_TOKEN,
+    channel: channelId,
+    ts: ts,
+    limit: 1,
+    inclusive: true,
   };
 
-  /**
-   * 初めはreactions.getでスタンプしたメッセージを取得していたが
-   * まるっと情報を取得するならconversations.historyの方が期待値に近いので採用している
-   * けどhistoryがアップデートに伴いrepliesを使う必要があるのでrepliesに落ち着いた
-   */
   const response = UrlFetchApp.fetch(
     "https://slack.com/api/conversations.replies",
-    messageOptions as any
+    {
+      method: "post",
+      contentType: "application/x-www-form-urlencoded",
+      payload: JSON.stringify(payload),
+    }
   );
 
-  const res = JSON.parse(response as any);
-
-  return res;
+  const conversationsHistory = JSON.parse(response as any);
+  return conversationsHistory.messages[0];
 };
 
 const main = (e: any) => {
@@ -77,10 +59,12 @@ const main = (e: any) => {
   }
 
   const event = params.event;
-  const subtype = event.subtype;
-  const type = params.event.type;
 
-  // NOTE:Slack Botによるメンションを無視する
+  const subtype = event.subtype;
+  const type = event.type;
+  const user = event.user;
+
+  // NOTE:Slack Botによるメンションを無視する（無限ループを回避する）
   if (subtype) return;
 
   // NOTE:Slackの3秒ルールで発生するリトライをキャッシュする
@@ -88,34 +72,28 @@ const main = (e: any) => {
   if (cache.get(params.event_id) == "done") return;
   cache.put(params.event_id, "done", 600);
 
-  if (type === "reaction_added") {
+  // NOTE:以下からメインの処理
+
+  // NOTE:ログをとる
+  sendToSlack(undefined, undefined, user);
+
+  if (["message"].includes(type)) {
+    const channelId = event.channel;
+    const thread_ts = event.thread_ts || event.ts;
+    // NOTE:RSSの内容だけに反応させる
+    sendToSlack(channelId, thread_ts, event);
+  }
+
+  if (["reaction_added"].includes(type)) {
+    // NOTE:「要約して」スタンプだけに反応させる
+    if (event.reaction !== "youyaku") return;
+
     const channelId = event.item.channel;
     const thread_ts = event.item.ts;
 
-    const conversationsHistory = getConversationsHistory(
-      params,
-      channelId,
-      thread_ts
-    );
-    // NOTE:「要約して」スタンプだけに反応させる
-
     // NOTE:スタンプを押下したメッセージ（単体）の内容を取得する
-    const message = conversationsHistory.messages[0];
-    sendToSlack(params, channelId, thread_ts, message);
-  }
-
-  if (type === "message") {
-    const channelId = event.channel;
-    const thread_ts = event.thread_ts || event.ts;
-    // NOTE:RSSの内容だけに反応させる
-    sendToSlack(params, channelId, thread_ts);
-  }
-
-  if (type === "bot_message") {
-    const channelId = event.channel;
-    const thread_ts = event.thread_ts || event.ts;
-    // NOTE:RSSの内容だけに反応させる
-    sendToSlack(params, channelId, thread_ts, "ボットメッセージです！");
+    const message = getConversationsReplies(channelId, thread_ts);
+    sendToSlack(channelId, thread_ts, message);
   }
 
   return;
