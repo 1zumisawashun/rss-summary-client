@@ -14,11 +14,12 @@ const main = (e: any) => {
   }
 
   const event = params.event;
-  const subtype = event.subtype;
   const type = event.type;
+  const bot_id = event.bot_id;
 
   // NOTE:Slack Botによるメンションを無視する（無限ループを回避する）
-  if (subtype) return;
+  // NOTE:自分自身（mosukun Bot）だけは無視して他のbotとの会話は可能にする
+  if (bot_id === "B05CW8PF316") return;
 
   // NOTE:Slackの3秒ルールで発生するリトライをキャッシュする
   const cache = CacheService.getScriptCache();
@@ -28,10 +29,17 @@ const main = (e: any) => {
   // NOTE:以下からメインの処理
 
   if (["message"].includes(type)) {
+    // NOTE:RSS Bot以外は早期リターンする
+    if (bot_id !== "B03GXHC7BMF") return;
+
     const channelId = event.channel;
     const thread_ts = event.thread_ts || event.ts;
-    // NOTE:RSSの内容だけに反応させる
-    sendToSlack(channelId, thread_ts, event);
+
+    const message = getConversationsReplies(channelId, thread_ts);
+    const content = messageFormatter(message);
+    const text = getChatGptMessage(`日本語で要約してください。${content}`);
+
+    sendToSlack(channelId, thread_ts, text);
   }
 
   if (["reaction_added"].includes(type)) {
@@ -41,7 +49,6 @@ const main = (e: any) => {
     const channelId = event.item.channel;
     const thread_ts = event.item.ts;
 
-    // NOTE:スタンプを押下したメッセージ（単体）の内容を取得する
     const message = getConversationsReplies(channelId, thread_ts);
     const content = messageFormatter(message);
     const text = getChatGptMessage(`日本語で要約してください。${content}`);
