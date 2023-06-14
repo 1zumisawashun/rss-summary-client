@@ -1,68 +1,21 @@
-// import { getChatGptMessage } from "./helpers";
-
-export const sendToSlack = (
-  channelId?: string,
-  thread_ts?: string,
-  message?: any
-) => {
-  const url = process.env.SLACK_INCOMING_WEBHOOK;
-
-  if (!url) return;
-
-  const payload = JSON.stringify({
-    token: process.env.BOT_USER_OAUTH_TOKEN,
-    channel: channelId,
-    text: JSON.stringify(message),
-    thread_ts: thread_ts,
-  });
-
-  UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    payload: payload,
-  });
-};
-
-const getConversationsReplies = (channelId: string, ts: string) => {
-  /**
-   * 初めはreactions.getでリアクション（スタンプ）したメッセージを取得していたが
-   * まるっと情報を取得するならconversations.historyの方が期待値に近いので採用。
-   * しかしconversations.historyがアップデートに伴いconversations.repliesを使う必要があった。
-   */
-  const payload = {
-    token: process.env.BOT_USER_OAUTH_TOKEN,
-    channel: channelId,
-    ts: ts,
-    limit: 1,
-    inclusive: true,
-  };
-
-  const response = UrlFetchApp.fetch(
-    "https://slack.com/api/conversations.replies",
-    {
-      method: "post",
-      contentType: "application/x-www-form-urlencoded",
-      payload: JSON.stringify(payload),
-    }
-  );
-
-  const conversationsHistory = JSON.parse(response as any);
-  return conversationsHistory.messages[0];
-};
+import {
+  getChatGptMessage,
+  sendToSlack,
+  getConversationsReplies,
+  messageFormatter,
+} from "./helpers";
 
 const main = (e: any) => {
   const params = JSON.parse(e.postData.getDataAsString());
 
-  // NOTE:SlackのEvent SubscriptionのRequest Verification用
+  // NOTE:SlackのEvent SubscriptionsのRequest Verification用
   if (params.type === "url_verification") {
     return ContentService.createTextOutput(params.challenge);
   }
 
   const event = params.event;
-
   const subtype = event.subtype;
   const type = event.type;
-  const user = event.user;
 
   // NOTE:Slack Botによるメンションを無視する（無限ループを回避する）
   if (subtype) return;
@@ -73,9 +26,6 @@ const main = (e: any) => {
   cache.put(params.event_id, "done", 600);
 
   // NOTE:以下からメインの処理
-
-  // NOTE:ログをとる
-  sendToSlack(undefined, undefined, user);
 
   if (["message"].includes(type)) {
     const channelId = event.channel;
@@ -93,7 +43,10 @@ const main = (e: any) => {
 
     // NOTE:スタンプを押下したメッセージ（単体）の内容を取得する
     const message = getConversationsReplies(channelId, thread_ts);
-    sendToSlack(channelId, thread_ts, message);
+    const content = messageFormatter(message);
+    const text = getChatGptMessage(`日本語で要約してください。${content}`);
+
+    sendToSlack(channelId, thread_ts, text);
   }
 
   return;
